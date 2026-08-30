@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>JobPilot Agent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { margin-bottom: 0; }
+  p.sub { color: #888; margin-top: 0.25rem; }
+  textarea { width: 100%; box-sizing: border-box; font-family: inherit; padding: 0.6rem; border-radius: 6px; border: 1px solid #999; }
+  label { font-weight: 600; display: block; margin-top: 1rem; }
+  button { margin-top: 1rem; padding: 0.6rem 1.2rem; font-size: 1rem; border-radius: 6px; border: none; background: #2563eb; color: white; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: wait; }
+  #log { white-space: pre-wrap; background: #111; color: #0f0; padding: 1rem; border-radius: 6px; margin-top: 1rem; max-height: 260px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; display: none; }
+  #result { margin-top: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; border-bottom: 1px solid #444; padding: 0.4rem; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <h1>JobPilot</h1>
+  <p class="sub">Give it a job posting and your profile. It plans and executes the whole application on its own.</p>
+
+  <label for="job">Job posting</label>
+  <textarea id="job" rows="8" placeholder="Paste the full job description here..."></textarea>
+
+  <label for="profile">Your profile / resume</label>
+  <textarea id="profile" rows="8" placeholder="Paste your resume or a summary of your skills and experience..."></textarea>
+
+  <button id="run">Run agent</button>
+
+  <div id="log"></div>
+  <div id="result"></div>
+
+  <h2>Past applications</h2>
+  <table id="pastTable"><thead><tr><th>Company</th><th>Title</th><th>Fit</th><th>Follow-up</th></tr></thead><tbody></tbody></table>
+
+<script>
+async function loadPast() {
+  const res = await fetch('/api/applications');
+  const rows = await res.json();
+  const tbody = document.querySelector('#pastTable tbody');
+  tbody.innerHTML = rows.map(r => `<tr><td>${r.company||''}</td><td>${r.title||''}</td><td>${r.fit_score||''}</td><td>${(r.followup&&r.followup.due_date)||''}</td></tr>`).join('');
+}
+
+document.getElementById('run').addEventListener('click', async () => {
+  const btn = document.getElementById('run');
+  const job_text = document.getElementById('job').value.trim();
+  const profile_text = document.getElementById('profile').value.trim();
+  if (!job_text || !profile_text) { alert('Paste both a job posting and a profile.'); return; }
+
+  btn.disabled = true; btn.textContent = 'Running...';
+  const log = document.getElementById('log');
+  log.style.display = 'block';
+  log.textContent = 'Agent planning and executing...\n';
+  document.getElementById('result').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({job_text, profile_text})
+    });
+    const data = await res.json();
+    log.textContent = (data.steps || []).join('\n\n');
+    document.getElementById('result').innerHTML = `<h2>Result</h2><div>${(data.final_text||'').replace(/\n/g,'<br>')}</div>`;
+    loadPast();
+  } catch (e) {
+    log.textContent += '\nError: ' + e;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Run agent';
+  }
+});
+
+loadPast();
+</script>
+</body>
+</html>
